@@ -27,8 +27,8 @@ library(mvtnorm)
 library(tidyverse)
 
 #Number of reps and bootstraps
-nreps = 2 #number of rcts
-B = 8 #number of bootstrap samples
+nreps = 1 #number of rcts
+B = 0 #number of bootstrap samples
 
 #------------------------------------------------------------
 # SIMULATION MODEL PARAMETERS 
@@ -86,7 +86,7 @@ frac_treat=.5
 #  beta_mnr    = effect of non-response
 #  beta_mr     = effect of (Y21+Y22+Y23+Y24)/4-10000
 #------------------------------------------------------------
-miss_type="MNAR"
+miss_type="MAR"
 alpha_m=-2.2
 beta_m0=-.5/1000
 beta_ma=1
@@ -160,7 +160,8 @@ if(LM == 1){
   A_seLM = MainA_LM[2]
   
   #Compute RMSE, Coverage probability for 95% CI and hypothesis test
-  true_LM = beta_a + (1-p_1)*beta_1nr + (1-p_0)*beta_0nr
+  #true_LM = beta_a + (1-p_1)*beta_1nr + (1-p_0)*beta_0nr
+  true_LM = beta_a
   testA_LM = RMSE_CovP_Rej(truth=true_LM, trtcoef=A_trtcoefLM, SE=A_seLM, zstar= z975) #function defined in 1-SimFunctions.R
   A_RMSE = testA_LM[1]; A_CovP = testA_LM[2]; A_rej = testA_LM[3]
   #Note:testA_LM is a 3 element vector of the RMSE value, Coverage prob and whether we rejected (0 or 1)
@@ -191,6 +192,7 @@ if(LMM == 1){
 #-------------------------------------------
 # Bootstrap 
 #-------------------------------------------
+if (B!=0){
 cat("Starting bootstrap","\n")
 
 boot.trtcoefs_LM = c()
@@ -262,7 +264,7 @@ if (LMM==1){
   #Add bootstrap results to data frame for main effect A
   res_df = rbind(res_df,c(nrep,"LMM","Bootstrap SE", A_trtcoefLMM, boot.A_seLMM, "--", boot.A_CovP, boot.A_rej))
 }
-
+}
 
 } #end rep loop
 names(res_df) = c("RCT #","Model","SE_type","A_trtcoef","A_se","A_RMSE","A_CovP","A_rej")
