@@ -763,3 +763,4 @@ RMSE_CovP_Rej = function(truth, trtcoef, SE,zstar){
 #               nperson=nperson)
 # }
 
+
