@@ -144,12 +144,12 @@ gen.data = function(seed,alpha, beta_age, beta_ri, beta_a, beta_1b, beta_0b, rho
   
   # Determine response status and compute nr1,nr0,y_S1avg (average of wks 9-12)
   #Initialize
-  wide.dat$nr = rep(0,nperson)
-  wide.dat$nr0 = rep(0,nperson)
-  wide.dat$nr1 = rep(0,nperson)
-  wide.dat$b = rep(0,nperson)
-  wide.dat$b1 = rep(0,nperson)
-  wide.dat$b0 = rep(0,nperson)
+  wide.dat$nr = rep(0,nperson) #non-responders 
+  wide.dat$nr0 = rep(0,nperson) #non-responders in a=0
+  wide.dat$nr1 = rep(0,nperson) #non-responders in a=1
+  wide.dat$b = rep(0,nperson) #b = 0, -1 or 1
+  wide.dat$b1 = rep(0,nperson)#b variable*I(a=1)
+  wide.dat$b0 = rep(0,nperson) #b variable*I(a=0) 
   
   wide.dat$y_S1avg = rowMeans(wide.dat[,14:17],na.rm=TRUE) #Take mean of observed y9..y12 for each person (remove NAs)
   # Checked that the line of code below works
