@@ -1,6 +1,6 @@
 ##### This script is the main simulation code (uses functions from 1-SimFunctions.R) #####
 setwd("~/NIH Internship")
-source("1-SimFunctions_7-7.R")
+source("1-SmartSimFunctions.R")
 
 ################################################################################
 #-------------------------------------------------------------------------------
@@ -24,7 +24,7 @@ library(lsmeans)
 library(multcomp)
 library(nlme)
 library(mvtnorm)
-library(tidyverse)
+#library(tidyverse)
 
 #Number of reps and bootstraps
 nreps = 1 #number of rcts
@@ -35,7 +35,7 @@ B = 0 #number of bootstrap samples
 #------------------------------------------------------------
 alpha=10000.0
 beta_age=-50.
-beta_ri=-4000.
+beta_ri=-4000. #run-in 
 beta_a=00.
 beta_1b=00.
 beta_0b=00.
@@ -45,14 +45,14 @@ rho=52
 gam=2000
 #beta_1nr
 #beta_0nr
-beta_nr121 = -2865.421
-beta_nr122 = -2905.38
-beta_nr123 = -2816.242
-beta_nr124 = -2853.776
-beta_nr021 = -2766.204
-beta_nr022 = -2794.646
-beta_nr023 = -2717.026
-beta_nr024 = -2747.798
+# beta_nr121 = -2865.421
+# beta_nr122 = -2905.38
+# beta_nr123 = -2816.242
+# beta_nr124 = -2853.776
+# beta_nr021 = -2766.204
+# beta_nr022 = -2794.646
+# beta_nr023 = -2717.026
+# beta_nr024 = -2747.798
 p_1 = .2222
 p_0 = .2241
 
@@ -76,7 +76,7 @@ frac_treat=.5
 #  miss_type = MCAR    Missing Completely at Random
 #  miss_type = MAR     Missing at Random
 #  miss_type = MNAR    Missing Not at Random
-#  miss_prob           Probability of Missing
+#  miss_prob           Probability of Missing at each week 
 #
 # MISSINGNESS LOGISTIC MODELS FOR MAR and MNAR
 #  alpha_m     = intercept
@@ -93,7 +93,7 @@ beta_ma=1
 beta_mt=1/12
 beta_mnr=1
 beta_mr=-.5/1000
-beta_yt =-.5/100
+beta_yt =-.5/1000
 miss_prob=.1 #only relevant for MCAR
 
 #miss_type='MCAR' 
@@ -178,8 +178,9 @@ if(LMM == 1){
   A_seLMM = MainA_LMM[2]
  
   #Compute RMSE, Coverage probability for 95% CI and hypothesis test
-  true_LMM = beta_a + ((1-p_1)*(beta_nr121+beta_nr122+beta_nr123+beta_nr124))/4 -
-    ((1-p_0)*(beta_nr021+beta_nr022+beta_nr023+beta_nr024))/4
+ # true_LMM = beta_a + ((1-p_1)*(beta_nr121+beta_nr122+beta_nr123+beta_nr124))/4 -
+   # ((1-p_0)*(beta_nr021+beta_nr022+beta_nr023+beta_nr024))/4
+  true_LMM = beta_a 
   
   #testA_LMM is a 3 element vector of the RMSE value, Coverage prob and whether we rejected (0 or 1)
   testA_LMM = RMSE_CovP_Rej(truth=true_LMM, trtcoef=A_trtcoefLMM, SE=A_seLMM, zstar= z975) #function defined in 1-SimFunctions.R
