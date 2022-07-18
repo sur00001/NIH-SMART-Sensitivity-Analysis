@@ -1,10 +1,12 @@
-##### This script defines functions that will be used for the simulations #####
+################################################################################
+# This script defines functions to generate simulation data, estimate contrasts
+# RMSE, Coverage probability and conduct a hypothesis test 
 
 
 #-------------------------------------------------------------------------------
 # Function to generate Y-values for all people 
 
-# Inputs: t (timepoint),z (random error term), gam (scales the random variance),
+# Inputs: t (timepoint),z (random error terms), gam (scales the random variance),
 # true parameters (alpha,beta_age,beta_ri,beta_a,beta_1b,beta_0b)
 # and data (ba = baseline age, a = first arm trt, b = 2nd arm trt)
 
@@ -34,10 +36,12 @@ Gen.yt <- function(t,z,gam,alpha,beta_age,ba,beta_ri,
 #-------------------------------------------------------------------------------
 # Function to induce missingness
 
-# Inputs: miss_type, miss_prob, stage (stage 1 or 2), wide.df (current data frame),
-# nperson
+# Inputs: nperson, t (time point), yt (vector of y observations at time t),
+#      miss_type, miss_prob (if mcar), wide.df (current data frame),
+#      and logistic parameters to determine missingness
 
-# Output: data frame with missing values or 'observed data'
+
+# Output: data frame with missing values (aka the 'observed data')
 #-------------------------------------------------------------------------------
 
 #Function to calculate missingness for a time-point based on missingness mechanism (MAR or MNAR)
@@ -73,13 +77,13 @@ induce.missYt = function(nperson,t,yt,wide.df,alpha_m=NULL, beta_m0=NULL,
   return(yt)
 }
 
+
 #-------------------------------------------------------------------------------
 # Function to generate data for simulation
 
 #Inputs: true parameters and other sim parameters 
 
-
-#Output: wide and long data frames of generated data for that replication, p1hat, p0hat
+#Output: wide and long data frames of generated data for that rep
 #-------------------------------------------------------------------------------
 
 gen.data = function(seed,alpha, beta_age, beta_ri, beta_a, beta_1b, beta_0b, rho, gam,
@@ -120,10 +124,10 @@ gen.data = function(seed,alpha, beta_age, beta_ri, beta_a, beta_1b, beta_0b, rho
   names(wide.dat) = c("id","a","ba","ym1","y0","y1","y2","y3","y4","y5","y6","y7","y8","y9","y10","y11","y12")
   
   #Induce missingness in first stage (skip below if doing full data analysis)
-  if (miss_type!= "none"){
+  if (miss_type!= "NONE"){
       for (time in 1:12){ #will parallelize this later
         
-        t.index = which(names(wide.dat)==paste("y",time,sep="")) #find the column where yt is in the wide data
+        t.index = which(names(wide.dat)==paste("y",time,sep="")) #find the column where yt is in the wide data frame
         yt = wide.dat[,t.index] #extract the yt vector (everyone's y values at time t)
         
         if (miss_type=="MCAR"){yt = induce.missYt(nperson=nperson,t=time,yt = yt,
@@ -139,8 +143,8 @@ gen.data = function(seed,alpha, beta_age, beta_ri, beta_a, beta_1b, beta_0b, rho
         wide.dat[,t.index] = yt
     }
   }
-  #NOTE: I set up this function so we could have different missingness mechanisms at different times. miss_type could be a vector 
-  #where each element in the vector is the missingness mechanism for each time-point. It would be a 24 element vector (for the 24 weeks)
+  #NOTE: I set up this function so we could also have different missingness mechanisms at different times. Ex: miss_type could also be a vector 
+  #where each element in the vector is the missingness mechanism for each time-point (miss_type[t]; it would be a 24 element vector for the 24 weeks).
   
   # Determine response status and compute nr1,nr0,y_S1avg (average of wks 9-12)
   #Initialize
@@ -151,7 +155,7 @@ gen.data = function(seed,alpha, beta_age, beta_ri, beta_a, beta_1b, beta_0b, rho
   wide.dat$b1 = rep(0,nperson)#b variable*I(a=1)
   wide.dat$b0 = rep(0,nperson) #b variable*I(a=0) 
   
-  wide.dat$y_S1avg = rowMeans(wide.dat[,14:17],na.rm=TRUE) #Take mean of observed y9..y12 for each person (remove NAs)
+  wide.dat$y_S1avg = rowMeans(wide.dat[,which(names(wide.dat)=="y9"):which(names(wide.dat)=="y12")],na.rm=TRUE) #Take mean of observed y9..y12 for each person (remove NAs)
   # Checked that the line of code below works
   wide.dat$nr[is.na(wide.dat$y_S1avg)| wide.dat$y_S1avg<10000] = 1 #avg is less than 10000 steps OR all 4 weeks are missing
   wide.dat$nr0[wide.dat$nr==1 & wide.dat$a==0] = 1 #0 otherwise bc vector is initialized as 0's
@@ -180,7 +184,7 @@ gen.data = function(seed,alpha, beta_age, beta_ri, beta_a, beta_1b, beta_0b, rho
   #Induce missingness in 2nd stage (skip below if doing full data analysis)
   
   full.dat = wide.dat #For MNAR: need y21 to 24 to be not NA, otherwise we cannot compute the prob of missingness based on y21-y24
-  if (miss_type!= "none"){
+  if (miss_type!= "NONE"){
     for (time in 13:24){ #will parallelize this later
       
       t.index = which(names(wide.dat)==paste("y",time,sep="")) #find the column where yt is in the wide data
@@ -203,10 +207,7 @@ gen.data = function(seed,alpha, beta_age, beta_ri, beta_a, beta_1b, beta_0b, rho
   
   # Calculate final outcome 
   wide.dat$y_avg = rowMeans(wide.dat[,which(names(wide.dat)=="y21"):which(names(wide.dat)=="y24")],na.rm=TRUE) #Average y21,y22,y23,y24
-  
-  #For people where all y21-y24 observations are missing, delete those people. Later we will impute those people
- # wide.dat = wide.dat[-which(is.na(wide.dat$y_avg)),]
-  
+
   # Average the run-in periods
   wide.dat$y0 = (wide.dat$ym1 + wide.dat$y0)/2 #Averaged the 2 run-ins 
   wide.dat$ym1 = NULL 
@@ -218,7 +219,6 @@ gen.data = function(seed,alpha, beta_age, beta_ri, beta_a, beta_1b, beta_0b, rho
   #                                      names_to= c("time"), values_to = c("y"))
   
   #Create long data - will make this faster later
-  #nperson = dim(wide.dat)[1]
   num_response=nperson*25
   almm=rep(0,times=num_response)
   b1lmm=rep(0,times=num_response)
@@ -616,9 +616,9 @@ gen.data = function(seed,alpha, beta_age, beta_ri, beta_a, beta_1b, beta_0b, rho
 #-------------------------------------------------------------------------------
 # Functions to get contrasts and SE - for LMM and LM models
 
-#Inputs: fit_dat (data used to fit model), p1_hat and p0_hat, and true parameters
+#Inputs: fit_dat (data used to fit model), p1_hat and p0_hat
 
-#Output: vector of contrast value and SE
+#Output: 2 element vector of contrast value and SE
 #-------------------------------------------------------------------------------
 
 
@@ -642,14 +642,14 @@ LMM_contrasts = function(fit_dat,p1_hat, p0_hat){
   K[32]=1/4
   K[33]=1/4
   K[34]=1/4
-  K[67]=(1-p1_hat)/4
-  K[68]=(1-p1_hat)/4
-  K[69]=(1-p1_hat)/4
-  K[70]=(1-p1_hat)/4
-  K[79]=-1*(1-p0_hat)/4
-  K[80]=-1*(1-p0_hat)/4
-  K[81]=-1*(1-p0_hat)/4
-  K[82]=-1*(1-p0_hat)/4
+  # K[67]=(1-p1_hat)/4
+  # K[68]=(1-p1_hat)/4
+  # K[69]=(1-p1_hat)/4
+  # K[70]=(1-p1_hat)/4
+  # K[79]=-1*(1-p0_hat)/4
+  # K[80]=-1*(1-p0_hat)/4
+  # K[81]=-1*(1-p0_hat)/4
+  # K[82]=-1*(1-p0_hat)/4
   c=glht(fit,linfct=K)
   z=summary(c,test=Chisqtest())
   
@@ -671,9 +671,15 @@ LM_contrasts = function(fit_dat,p1_hat, p0_hat){
 
   K=rep(0,times=8) #8 elements because we took out ym1
   dim(K)=c(1,8)
-  K[4]=1
-  K[7]=1-p1_hat
-  K[8]=-1*(1-p0_hat)
+  
+  #Beta_a hat 
+  K[4] = 1
+  
+  #CONTRAST - what we used before
+  # K[4]=1
+  # K[7]=1-p1_hat
+  # K[8]=-1*(1-p0_hat)
+  
   c=glht(fit,linfct=K)
   z=summary(c,test=Chisqtest())
   
@@ -701,11 +707,11 @@ RMSE_CovP_Rej = function(truth, trtcoef, SE,zstar){
   CovP = ifelse(truth >= trtcoef-1.96*SE & truth <= trtcoef+1.96*SE, 1, 0) 
 
   #Test H_0
-  z= abs(trtcoef)/SE #Instead of trtcoef-0, should I put the trtcoef - (-31)? (true null value from simulation)
+  z= abs(trtcoef)/SE 
   Rej = ifelse(z >= zstar,1,0) 
   
   #Vector of MSE, CovP and Reg
-  vec = c(sqrt(MSE),CovP,Rej)
+  vec = c(sqrt(MSE),CovP,Rej) #sqrt(MSE) because we are interested in RMSE
   
   return(vec)
 }
@@ -762,5 +768,4 @@ RMSE_CovP_Rej = function(truth, trtcoef, SE,zstar){
 #   wide.dat = induce.miss(miss_type=miss_type,miss_prob=miss_prob,stage=2,wide.df=wide.dat,
 #               nperson=nperson)
 # }
-
 
