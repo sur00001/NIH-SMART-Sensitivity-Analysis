@@ -26,9 +26,15 @@ library(nlme)
 library(mvtnorm)
 #library(tidyverse)
 
-#Number of reps and bootstraps
-nreps = 1 #number of rcts
+#------------------------------------------------------------
+# NUMBER OF REPS AND BOOTSTRAP SAMPLES, AND MODEL INDICATORS  
+#------------------------------------------------------------
+#Number of reps and bootstraps, model indicators and zstar
+nreps = 10 #number of rcts
 B = 0 #number of bootstrap samples
+z975=qnorm(.975,mean=0,sd=1)
+LMM = 1 #indicator variables for LMM and LM
+LM = 1
 
 #------------------------------------------------------------
 # SIMULATION MODEL PARAMETERS 
@@ -41,8 +47,7 @@ beta_1b=00.
 beta_0b=00.
 # correlation=exp(-|time diff in weeks|/rho)
 rho=52
-# error sd
-gam=2000
+gam=2000 #error sd
 #beta_1nr
 #beta_0nr
 # beta_nr121 = -2865.421
@@ -53,8 +58,8 @@ gam=2000
 # beta_nr022 = -2794.646
 # beta_nr023 = -2717.026
 # beta_nr024 = -2747.798
-p_1 = .2222
-p_0 = .2241
+#p_1 = .2222
+#p_0 = .2241
 
 #------------------------------------------------------------
 # SIMULATION PARAMETERS RELATED TO MODEL
@@ -73,6 +78,7 @@ frac_treat=.5
 #------------------------------------------------------------
 #------------------------------------------------------------
 # MISSINGNESS PARAMETERS 
+#  miss_type = NONE    Full data analysis
 #  miss_type = MCAR    Missing Completely at Random
 #  miss_type = MAR     Missing at Random
 #  miss_type = MNAR    Missing Not at Random
@@ -85,24 +91,17 @@ frac_treat=.5
 #  beta_mt     = effect of time-12
 #  beta_mnr    = effect of non-response
 #  beta_mr     = effect of (Y21+Y22+Y23+Y24)/4-10000
+#  beta_yt     = effect of Yt (current time point)
 #------------------------------------------------------------
-miss_type="MAR"
+miss_type="MCAR"
 alpha_m=-2.2
 beta_m0=-.5/1000
 beta_ma=1
 beta_mt=1/12
-beta_mnr=1
-beta_mr=-.5/1000
-beta_yt =-.5/1000
+beta_mnr=.75
+beta_mr=-.25/1000
+beta_yt =-.25/1000
 miss_prob=.1 #only relevant for MCAR
-
-#miss_type='MCAR' 
-#miss_prob=.1
-
-#Parameters needed when determining contrasts  
-z975=qnorm(.975,mean=0,sd=1)
-LMM = 1 #indicator variables for LMM and LM
-LM = 0
 
 # Results dataframe will contain the rep #, model ("LMM" or "LM"), SE_type (bootstrap or model),
 #treatment coef, SE, RMSE, Coverage probability and rejection (0 or 1) for the main effect of A
@@ -154,40 +153,68 @@ p1_hat = (sum(wide.dat$a==1)-sum(wide.dat$nr1==1))/(sum(wide.dat$a==1))
 
 # LM model
 if(LM == 1){ 
+  
   #Get contrast and SE
-  MainA_LM = LM_contrasts(fit_dat = wide.dat,p1_hat = p1_hat, p0_hat = p0_hat)
-  A_trtcoefLM = MainA_LM[1]
-  A_seLM = MainA_LM[2]
+  fit=lm(y_avg~ba+y0+a+b1+b0+nr1+nr0,data=wide.dat)
+  
+  # TEST FOR MAIN EFFECT OF A - LM
+  K=rep(0,times=8) #8 elements because we took out ym1
+  dim(K)=c(1,8)
+  K[4] = 1   #Beta_a hat 
+  c_LM=glht(fit,linfct=K)
+  #z=summary(c_LM,test=Chisqtest())
+  
+  #Trt coef and SE
+  A_trtcoefLM = coef(c_LM)[1]
+  A_seLM = sqrt(vcov(c_LM)[1,1])
   
   #Compute RMSE, Coverage probability for 95% CI and hypothesis test
-  #true_LM = beta_a + (1-p_1)*beta_1nr + (1-p_0)*beta_0nr
+  #Contrast: true_LM = beta_a + (1-p_1)*beta_1nr + (1-p_0)*beta_0nr
   true_LM = beta_a
   testA_LM = RMSE_CovP_Rej(truth=true_LM, trtcoef=A_trtcoefLM, SE=A_seLM, zstar= z975) #function defined in 1-SimFunctions.R
-  A_RMSE = testA_LM[1]; A_CovP = testA_LM[2]; A_rej = testA_LM[3]
+  A_RMSELM = testA_LM[1]; A_CovPLM = testA_LM[2]; A_rejLM = testA_LM[3]
   #Note:testA_LM is a 3 element vector of the RMSE value, Coverage prob and whether we rejected (0 or 1)
   
   #Add results to data frame for main effect A
-  res_df = rbind(res_df,c(nrep,"LM","Ordinary SE",A_trtcoefLM,A_seLM,A_RMSE,A_CovP,A_rej))
+  res_df = rbind(res_df,c(nrep,"LM","Ordinary SE",A_trtcoefLM,A_seLM,A_RMSELM,A_CovPLM,A_rejLM))
 }
 
 # LMM model
 if(LMM == 1){ 
-  #Get contrast and SE
-  MainA_LMM = LMM_contrasts(fit_dat = long.dat,p1_hat = p1_hat, p0_hat = p0_hat)
-  A_trtcoefLMM = MainA_LMM[1]
-  A_seLMM = MainA_LMM[2]
+  
+  #Fit model
+  fit=lmer(y~0+ba+runin+first_half+time_1st_half+time2_1st_half+time3_1st_half+second_half+time_2nd_half+time2_2nd_half+time3_2nd_half+
+             a1+a2+a3+a4+a5+a6+a7+a8+a9+a10+a11+a12+a13+a14+a15+a16+a17+a18+a19+a20+a21+a22+a23+a24+
+             b113+b114+b115+b116+b117+b118+b119+b120+b121+b122+b123+b124+
+             b013+b014+b015+b016+b017+b018+b019+b020+b021+b022+b023+b024+
+             nr113+nr114+nr115+nr116+nr117+nr118+nr119+nr120+nr121+nr122+nr123+nr124+
+             nr013+nr014+nr015+nr016+nr017+nr018+nr019+nr020+nr021+nr022+nr023+nr024+
+             (runin+ time_1st_half+ time_2nd_half | id), control=lmerControl(check.nobs.vs.nRE="ignore"), data=long.dat)
+  
+  # TEST FOR MAIN EFFECT OF A - LMM
+  K=rep(0,times=82)
+  dim(K)=c(1,82)
+  K[31]=1/4
+  K[32]=1/4
+  K[33]=1/4
+  K[34]=1/4
+  c_LMM=glht(fit,linfct=K)
+  #z=summary(c_LMM,test=Chisqtest())
+  
+  #Trt coef and SE
+  A_trtcoefLMM = coef(c_LMM)[1]
+  A_seLMM = sqrt(vcov(c_LMM)[1,1])
  
   #Compute RMSE, Coverage probability for 95% CI and hypothesis test
- # true_LMM = beta_a + ((1-p_1)*(beta_nr121+beta_nr122+beta_nr123+beta_nr124))/4 -
+ #Contrast: true_LMM = beta_a + ((1-p_1)*(beta_nr121+beta_nr122+beta_nr123+beta_nr124))/4 -
    # ((1-p_0)*(beta_nr021+beta_nr022+beta_nr023+beta_nr024))/4
   true_LMM = beta_a 
-  
-  #testA_LMM is a 3 element vector of the RMSE value, Coverage prob and whether we rejected (0 or 1)
   testA_LMM = RMSE_CovP_Rej(truth=true_LMM, trtcoef=A_trtcoefLMM, SE=A_seLMM, zstar= z975) #function defined in 1-SimFunctions.R
-  A_RMSE = testA_LMM[1]; A_CovP = testA_LMM[2]; A_rej = testA_LMM[3]
+  A_RMSELMM = testA_LMM[1]; A_CovPLMM = testA_LMM[2]; A_rejLMM = testA_LMM[3]
+  #Note: testA_LMM is a 3 element vector of the RMSE value, Coverage prob and whether we rejected (0 or 1)
   
   #Add results to data frame for main effect A
-  res_df = rbind(res_df,c(nrep,"LMM","Ordinary SE",A_trtcoefLMM,A_seLMM,A_RMSE,A_CovP,A_rej))
+  res_df = rbind(res_df,c(nrep,"LMM","Ordinary SE",A_trtcoefLMM,A_seLMM,A_RMSELMM,A_CovPLMM,A_rejLMM))
 }
 
 #-------------------------------------------
@@ -196,8 +223,8 @@ if(LMM == 1){
 if (B!=0){
 cat("Starting bootstrap","\n")
 
-boot.trtcoefs_LM = c()
-boot.trtcoefs_LMM = c()
+boot.trtcoefs_LM = c() #initialize
+boot.trtcoefs_LMM = c() #initialize
 
 for (b in 1:B){ 
 cat("Bootstrap #:",b,"\n")
@@ -275,7 +302,7 @@ res_df$A_rej = as.numeric(res_df$A_rej)
 
 
 #-------------------------------------------------------------------------------
-# Compute simulation results
+# Compute simulation standard error
 #-------------------------------------------------------------------------------
 
 # Empirical simulation SE - the standard error of the final trt A estimate (across all the reps)
@@ -305,11 +332,11 @@ write_results=function() {
       ,'Model Beta for 2nd stage trt when a=0=    ',beta_0b,'\n'
       #,'Model Beta for NR when a=1=               ',beta_1nr,'\n'
       #,'Model Beta for NR when a=-1=              ',beta_0nr,'\n'
-      ,'prob of response when a=1=                ',p_1,'\n'
-      ,'prob of response when a=0=                ',p_0,'\n'
+      #,'prob of response when a=1=                ',p_1,'\n'
+      #,'prob of response when a=0=                ',p_0,'\n'
       ,'corr parameter=                           ',rho,'\n'
       ,'error sd parameter=                       ',gam,'\n'
-      ,'Missingness Mechanism=                       ',miss_type,'\n'
+      ,'Missingness Mechanism=                    ',miss_type,'\n'
       ,'-------------------------------------------------------------------------','\n'
       ,'---------------------------------------------------------------------------------','\n'
       ,' MAIN A                       LM      LMM      ','\n'
@@ -327,19 +354,19 @@ write_results=function() {
   cat(sprintf("%s%8.1f%s%8.1f\n",
               ' RMSE treatment coef=    ',round(mean(res_df$A_RMSE[res_df$Model=="LM"],na.rm=TRUE),1),
               ' ',round(mean(res_df$A_RMSE[res_df$Model=="LMM"],na.rm=TRUE),1)))
-  cat(sprintf("%s%8.1f%s%8.1f\n",
+  cat(sprintf("%s%6.1f%s%6.1f\n",
               ' Power/Type I error(%)=    ',round((sum(res_df$A_rej[res_df$Model=="LM"&res_df$SE_type=="Ordinary SE"])/nreps)*100,2),
               '   ',round((sum(res_df$A_rej[res_df$Model=="LMM"&res_df$SE_type=="Ordinary SE"])/nreps)*100,2)))
-  cat(sprintf("%s%8.1f%s%8.1f\n",
+  cat(sprintf("%s%6.1f%s%6.1f\n",
               ' Coverage of 95% CI(%)=    ',round((sum(res_df$A_CovP[res_df$Model=="LM"&res_df$SE_type=="Ordinary SE"])/nreps)*100,2),
               '   ',round((sum(res_df$A_CovP[res_df$Model=="LMM"&res_df$SE_type=="Ordinary SE"])/nreps)*100,2)))
   cat(sprintf("%s%8.1f%s%8.1f\n",
               ' Avg. BOOT SE(trt coef)= ',round(mean(res_df$A_se[res_df$Model=="LM"&res_df$SE_type=="Bootstrap SE"]),1),
               ' ',round(mean(res_df$A_se[res_df$Model=="LMM"&res_df$SE_type=="Bootstrap SE"]),1)))
-  cat(sprintf("%s%8.1f%s%8.1f\n",
+  cat(sprintf("%s%6.1f%s%6.1f\n",
               ' BOOTPower/Type I error(%)=',round((sum(res_df$A_rej[res_df$Model=="LM"&res_df$SE_type=="Bootstrap SE"])/nreps)*100,2),
               '   ',round((sum(res_df$A_rej[res_df$Model=="LMM"&res_df$SE_type=="Bootstrap SE"])/nreps)*100,2)))
-  cat(sprintf("%s%8.1f%s%8.1f\n",
+  cat(sprintf("%s%6.1f%s%6.1f\n",
               ' BOOTCoverage of 95% CI(%)=',round((sum(res_df$A_CovP[res_df$Model=="LM"&res_df$SE_type=="Bootstrap SE"])/nreps)*100,2),
               '   ',round((sum(res_df$A_CovP[res_df$Model=="LMM"&res_df$SE_type=="Bootstrap SE"])/nreps)*100,2)))
   cat(' ---------------------------------------------------------------------------------','\n')
@@ -357,7 +384,6 @@ write_results()
 
 end_time = Sys.time()
 end_time-start_time #how long the simulation takes
-
 
 
 
