@@ -6,6 +6,7 @@
 library(mvtnorm)
 library(mice)
 library(broom.mixed)
+library(lme4)
 
 
 
@@ -243,24 +244,22 @@ fit.imputed = function(m,mod.type,allimp) {
 ################################################################################
 
 M=4
-
-#Open Toy long.dat and wide.dat
+ 
+# Open Toy long.dat and wide.dat
 load("C:/Users/surtc/OneDrive/Documents/NIH Internship/toy_datasets_w_missingness.rda")
-
-#Impute data
+ 
+# Impute data
 imps = impute.data(long.dat,wide.dat,M=M,SA=0) #no sensitivity analysis
 lmm.imps = imps[[1]]
 lm.imps = imps[[2]]
-
-#Run a LMM model and get pooled estimate using Rubin's rules
-
-#Obtain list of model fits for each imputed dataset
-lmm.fits = lapply(1:M,fit.imputed,mod.type="LMM",allimp=lmm.imp) 
+ 
+# Run a LMM model and get pooled estimate using Rubin's rules
+# Obtain list of model fits for each imputed dataset
+lmm.fits = lapply(1:M,fit.imputed,mod.type="LMM",allimp=lmm.imps) #fixed debug error
 pooled.fits = pool(lmm.fits)
 summary(pooled.fits)
 
 A_trtcoefLMM = (fit$estimate[fit$term=="a21"] + fit$estimate[fit$term=="a21"] +
-                  fit$estimate[fit$term=="a22"] + fit$estimate[fit$term=="a24"])/4
+                   fit$estimate[fit$term=="a22"] + fit$estimate[fit$term=="a24"])/4
 
  
-
