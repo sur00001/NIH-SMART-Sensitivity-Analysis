@@ -27,19 +27,23 @@ library(nlme)
 library(mvtnorm)
 library(mice)
 library(broom.mixed)
-
 #library(tidyverse)
 
 #------------------------------------------------------------
-# NUMBER OF REPS AND BOOTSTRAP SAMPLES, AND MODEL INDICATORS  
 #------------------------------------------------------------
-#Number of reps and bootstraps, model indicators and zstar
-nreps = 100 #number of rcts
-B = 0 #number of bootstrap samples
+# NUMBER OF REPS AND BOOTSTRAP SAMPLES, AND MODEL INDICATORS  
+#  nreps = number of reps or "RCT's"
+#  B     = number of bootstrap samples
+#  z975  = critical value for hypothesis testing and CIs
+#  LMM   = indicator for LMM analysis
+#  LM    = indicator for LM analysis
+#------------------------------------------------------------
+nreps = 1000
+B = 0 
 z975=qnorm(.975,mean=0,sd=1)
-LMM = 1 #indicator variables for LMM and LM
+LMM = 1 
 LM = 1
-
+#------------------------------------------------------------
 #------------------------------------------------------------
 # SIMULATION MODEL PARAMETERS 
 #------------------------------------------------------------
@@ -49,8 +53,7 @@ beta_ri=-4000. #run-in
 beta_a=00.
 beta_1b=00.
 beta_0b=00.
-# correlation=exp(-|time diff in weeks|/rho)
-rho=52
+rho=52 # correlation=exp(-|time diff in weeks|/rho)
 gam=2000 #error sd
 #beta_1nr
 #beta_0nr
@@ -64,24 +67,25 @@ gam=2000 #error sd
 # beta_nr024 = -2747.798
 #p_1 = .2222
 #p_0 = .2241
-
+#------------------------------------------------------------
 #------------------------------------------------------------
 # SIMULATION PARAMETERS RELATED TO MODEL
+#  minage = min age 
+#  maxagedel = delta for max age (min age + maxagedel = max age)
 #------------------------------------------------------------
 minage=20
 maxagedel=20
-
+#------------------------------------------------------------
 #------------------------------------------------------------
 # BASIC SIMULATION PARAMETERS 
-#------------------------------------------------------------
-# NPERSON = # of total subjects in trial 
-# FRAC_TREAT is the fraction randomized to treatment arm (A=1)
+#  nperson = # of total subjects in trial 
+#  frac_treat = the fraction randomized to treatment arm (A=1)
 #------------------------------------------------------------
 nperson=130
 frac_treat=.5
 #------------------------------------------------------------
 #------------------------------------------------------------
-# MISSINGNESS PARAMETERS 
+# MISSINGNESS PARAMETERS
 #  miss_type = NONE    Full data analysis
 #  miss_type = MCAR    Missing Completely at Random
 #  miss_type = MAR     Missing at Random
@@ -98,9 +102,9 @@ frac_treat=.5
 #  beta_yt     = effect of Yt (current time point)
 
 # IMPUTATION PARAMETERS
-# M            = number of imputed datasets
-# impute       = indicates whether you want results after MI 
-# SA           = indicators whether you want to conduct a sensitivity analysis
+#  M           = number of imputed datasets
+#  impute      = indicates whether you want results after MI 
+#  SA          = indicates whether you want to conduct a sensitivity analysis
 #------------------------------------------------------------
 miss_type="MCAR"
 alpha_m=-2.2
@@ -114,9 +118,13 @@ miss_prob=.1 #only relevant for MCAR
 M = 10
 impute = 0
 SA = 0
-
-# Results dataframe will contain the rep #, model ("LMM" or "LM"), SE_type (bootstrap or model),
-#treatment coef, SE, RMSE, Coverage probability and rejection (0 or 1) for the main effect of A
+#------------------------------------------------------------
+#------------------------------------------------------------
+#RESULTS DATA FRAME 
+# Contains the Rep number, model ("LMM" or "LM"), SE_type (bootstrap or model),
+# treatment coef, SE, RMSE, Power/type 1 error,
+# coverage probability and rejection (0 or 1) for the main effect of A
+#------------------------------------------------------------
 res_df = data.frame()
 
 options(warn=-1)
@@ -180,13 +188,12 @@ if(LM == 1){
   if (impute == 1){ #using imputed data
     
     #Obtain list of model fits for each imputed dataset
-    lm.fits = lapply(1:M,fit.imputed,mod.type="LM",allimp=lm.imp) #fit.imputed() is a function in "1a-ImputationFunctions.R"
+    lm.fits = lapply(1:M,fit.imputed,mod.type="LM",allimp=lm.imps) #fit.imputed() is a function in "1a-ImputationFunctions.R"
     pooled.fits = pool(lm.fits)
     fit = summary(pooled.fits)
     
+    # Treatment coefficient of the main effect of A and the SE using Rubin's rules
     A_trtcoefLM = fit$estimate[fit$term=="a"] 
-    
-    #Standard error calculated with Rubin's rules
     A_seLM = fit$std.error[fit$term=="a"]
   } 
   else #using observed data 
@@ -233,7 +240,7 @@ if(LMM == 1){
     #Still working on this
     A_seLMM 
   } 
-  else #using raw data
+  else #using observed data
   { 
   fit=lmer(y~0+ba+runin+first_half+time_1st_half+time2_1st_half+time3_1st_half+second_half+time_2nd_half+time2_2nd_half+time3_2nd_half+
                a1+a2+a3+a4+a5+a6+a7+a8+a9+a10+a11+a12+a13+a14+a15+a16+a17+a18+a19+a20+a21+a22+a23+a24+
@@ -367,7 +374,9 @@ lmm_A_sq.err = (res_df$A_trtcoef[res_df$Model=="LMM"] - mean(res_df$A_trtcoef[re
 lmm_A_sse = sqrt(sum(lmm_A_sq.err,na.rm=TRUE)/((nreps-1)*nreps)) 
 
 
-#Print Results
+#-------------------------------------------------------------------------------
+# Print results
+#-------------------------------------------------------------------------------
 write_results=function() {
   cat('Simulation to mimic SMART trial','\n'
       ,'James F. Troendle and Aparajita Sur, July 2022','\n'
@@ -438,3 +447,7 @@ write_results()
 
 end_time = Sys.time()
 end_time-start_time #how long the simulation takes
+
+
+
+
