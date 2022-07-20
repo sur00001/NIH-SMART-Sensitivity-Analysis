@@ -102,7 +102,7 @@ frac_treat=.5
 # impute       = indicates whether you want results after MI 
 # SA           = indicators whether you want to conduct a sensitivity analysis
 #------------------------------------------------------------
-miss_type="MAR"
+miss_type="MCAR"
 alpha_m=-2.2
 beta_m0=-.5/1000
 beta_ma=1
@@ -186,8 +186,8 @@ if(LM == 1){
     
     A_trtcoefLM = fit$estimate[fit$term=="a"] 
     
-    #Still working on this
-    A_seLM
+    #Standard error calculated with Rubin's rules
+    A_seLM = fit$std.error[fit$term=="a"]
   } 
   else #using observed data 
   {
