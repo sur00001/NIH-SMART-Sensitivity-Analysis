@@ -719,4 +719,3 @@ LM_contrasts = function(fit_dat,p1_hat, p0_hat){
 
 
 
-
