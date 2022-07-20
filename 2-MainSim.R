@@ -438,7 +438,3 @@ write_results()
 
 end_time = Sys.time()
 end_time-start_time #how long the simulation takes
-
-
-
-
