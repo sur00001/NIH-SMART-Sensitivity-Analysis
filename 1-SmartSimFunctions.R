@@ -612,7 +612,34 @@ gen.data = function(seed,alpha, beta_age, beta_ri, beta_a, beta_1b, beta_0b, rho
 }
 
 
+#-------------------------------------------------------------------------------
+# Function to get MSE, do hypothesis testing, coverage probability etc.
 
+#Inputs: truth (value), trtcoef(value), SE (bootstrap or model SE) and zstar (critical value)
+
+#Output: 3 element vector of MSE, Coverage Prob (binary) and Rejection (binary) 
+#-------------------------------------------------------------------------------
+RMSE_CovP_Rej = function(truth, trtcoef, SE,zstar){
+  
+  #MSE
+  MSE = (trtcoef - truth)**2
+  
+  #Calculate coverage for 95% CI
+  CovP = ifelse(truth >= trtcoef-1.96*SE & truth <= trtcoef+1.96*SE, 1, 0) 
+
+  #Test H_0
+  z= abs(trtcoef)/SE 
+  Rej = ifelse(z >= zstar,1,0) 
+  
+  #Vector of MSE, CovP and Reg
+  vec = c(sqrt(MSE),CovP,Rej) #sqrt(MSE) because we are interested in RMSE
+  
+  return(vec)
+}
+
+
+
+#NOTE: The main code does not use the below functions anymore
 #-------------------------------------------------------------------------------
 # Functions to get contrasts and SE - for LMM and LM models
 
@@ -660,7 +687,7 @@ LMM_contrasts = function(fit_dat,p1_hat, p0_hat){
   vec = c(A_trtcoef,A_se)
   return(vec)
 }
- 
+
 LM_contrasts = function(fit_dat,p1_hat, p0_hat){
   
   #--------------------------------
@@ -668,7 +695,7 @@ LM_contrasts = function(fit_dat,p1_hat, p0_hat){
   #--------------------------------
   
   fit=lm(y_avg~ba+y0+a+b1+b0+nr1+nr0,data=fit_dat)
-
+  
   K=rep(0,times=8) #8 elements because we took out ym1
   dim(K)=c(1,8)
   
@@ -689,83 +716,6 @@ LM_contrasts = function(fit_dat,p1_hat, p0_hat){
   vec = c(A_trtcoef,A_se)
   return(vec)
 }
-  
-
-#-------------------------------------------------------------------------------
-# Function to get MSE, do hypothesis testing, coverage probability etc.
-
-#Inputs: truth (value), trtcoef(value), SE (bootstrap or model SE) and zstar (critical value)
-
-#Output: 3 element vector of MSE, Coverage Prob (binary) and Rejection (binary) 
-#-------------------------------------------------------------------------------
-RMSE_CovP_Rej = function(truth, trtcoef, SE,zstar){
-  
-  #MSE
-  MSE = (trtcoef - truth)**2
-  
-  #Calculate coverage for 95% CI
-  CovP = ifelse(truth >= trtcoef-1.96*SE & truth <= trtcoef+1.96*SE, 1, 0) 
-
-  #Test H_0
-  z= abs(trtcoef)/SE 
-  Rej = ifelse(z >= zstar,1,0) 
-  
-  #Vector of MSE, CovP and Reg
-  vec = c(sqrt(MSE),CovP,Rej) #sqrt(MSE) because we are interested in RMSE
-  
-  return(vec)
-}
 
 
-
-
-################################### IGNORE BELOW (ROUGH WORK - THINGS TO ADD IN LATER) #######################################
-# #----------------------------------------------
-# # TEST FOR COMPARING REGIME 1,1 TO REGIME 1,-1
-# #----------------------------------------------
-# K=rep(0,times=82); dim(K)=c(1,82)
-# K[43]= K[44]= K[45]= K[46]= (2*(1-p1_hat))/4
-# c=glht(fit,linfct=K)
-# z=summary(c,test=Chisqtest())
-# 
-# reg1m1_trtcoef = coef(c)[1]
-# reg1m1_se = sqrt(vcov(c)[1,1])
-# 
-# #Compute MSE, Coverage probability for 95% CI and hypothesis test
-# true= 2*beta_1b*p_1
-# testReg1m1 = MSE_CovP_Rej(truth=true,trtcoef=reg1m1_trtcoef,SE=reg1m1_se,zstar= 1.96) #function defined in 1-SimFunctions.R
-# reg1m1_MSE = testReg1m1[1]; reg1m1_CovP = testReg1m1[2]; reg1m1_rej = testReg1m1[3]
-# 
-# #Add results to data frame for main effect for Regime 1,1 vs 1,-1
-# res_dat$reg1m1_trtcoef = c(res_dat$reg1m1_trtcoef, reg1m1_trtcoef); res_dat$reg1m1_se = c(res_dat$reg1m1_se, reg1m1_se)
-# res_dat$reg1m1_MSE = c(res_dat$reg1m1_MSE, reg1m1_MSE); res_dat$reg1m1_CovP = c(res_dat$reg1m1_CovP, reg1m1_CovP)
-# res_dat$reg1m1_rej = c(res_dat$reg1m1_rej, reg1m1_rej)
-# 
-# #----------------------------------------------
-# # TEST FOR COMPARING REGIME 1,1 TO REGIME -1,1
-# #----------------------------------------------
-# K=rep(0,times=82); dim(K)=c(1,82)
-# K[31]= K[32]= K[33]= K[34]= 1/4
-# K[43]= K[44]= K[45]= K[46]= K[67]= K[68]= K[69]= K[70]= (1-p1_hat)/4
-# K[55]= K[56]= K[57]= K[58]= K[79]= K[80]= K[81]= K[82]= -(1-p0_hat)/4
-# c=glht(fit,linfct=K)
-# z=summary(c,test=Chisqtest())
-# 
-# regm11_trtcoef = coef(c)[1]
-# regm11_se =  sqrt(vcov(c)[1,1])
-# 
-# #Compute MSE, Coverage probability for 95% CI and hypothesis test
-# true= beta_a+(1-p_1)*beta_1b+(1-p_1)*beta_1nr-(1-p_0)*beta_0b-(1-p_0)*beta_0nr
-# testRegm11 = MSE_CovP_Rej(truth=true,trtcoef=regm11_trtcoef,SE=regm11_se,zstar= 1.96) #function defined in 1-SimFunctions.R
-# regm11_MSE = testRegm11[1]; regm11_CovP = testRegm11[2]; regm11_rej = testRegm11[3]
-# 
-# #Add results to data frame for main effect for Regime 1,1 vs -1,1
-# res_dat$regm11_trtcoef = c(res_dat$regm11_trtcoef, regm11_trtcoef); res_dat$regm11_se = c(res_dat$regm11_se, regm11_se)
-# res_dat$regm11_MSE = c(res_dat$regm11_MSE, regm11_MSE); res_dat$regm11_CovP = c(res_dat$regm11_CovP, regm11_CovP)
-# res_dat$regm11_rej = c(res_dat$regm11_rej, regm11_rej)
-
-# if (miss_type!= "none"){
-#   wide.dat = induce.miss(miss_type=miss_type,miss_prob=miss_prob,stage=2,wide.df=wide.dat,
-#               nperson=nperson)
-# }
 
