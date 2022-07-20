@@ -243,23 +243,33 @@ fit.imputed = function(m,mod.type,allimp) {
 # DEMO
 ################################################################################
 
-# M=4
+M=4
 #  
 # # Open Toy long.dat and wide.dat
-# load("C:/Users/surtc/OneDrive/Documents/NIH Internship/toy_datasets_w_missingness.rda")
+load("C:/Users/surtc/OneDrive/Documents/NIH Internship/toy_datasets_w_missingness.rda")
 #  
 # # Impute data
-# imps = impute.data(long.dat,wide.dat,M=M,SA=0) #no sensitivity analysis
-# lmm.imps = imps[[1]]
-# lm.imps = imps[[2]]
-#  
-# # Run a LMM model and get pooled estimate using Rubin's rules
-# # Obtain list of model fits for each imputed dataset
-# lmm.fits = lapply(1:M,fit.imputed,mod.type="LMM",allimp=lmm.imps) #fixed debug error
-# pooled.fits = pool(lmm.fits)
-# summary(pooled.fits)
-# 
-# A_trtcoefLMM = (fit$estimate[fit$term=="a21"] + fit$estimate[fit$term=="a21"] +
-#                    fit$estimate[fit$term=="a22"] + fit$estimate[fit$term=="a24"])/4
+imps = impute.data(long.dat,wide.dat,M=M,SA=0) #no sensitivity analysis
+lmm.imps = imps[[1]]
+lm.imps = imps[[2]]
+
+## LINEAR MIXED MODEL ## 
+# Obtain list of model fits for each imputed dataset
+lmm.fits = lapply(1:M,fit.imputed,mod.type="LMM",allimp=lmm.imps) #fixed debug error
+pooled.fits = pool(lmm.fits)
+summary(pooled.fits)
+
+A_trtcoefLMM = (fit$estimate[fit$term=="a21"] + fit$estimate[fit$term=="a21"] +
+                   fit$estimate[fit$term=="a22"] + fit$estimate[fit$term=="a24"])/4
+
+## LINEAR MODEL ##
+#Obtain list of model fits for each imputed dataset
+lm.fits = lapply(1:M,fit.imputed,mod.type="LM",allimp=lm.imps) #fit.imputed() is a function in "1a-ImputationFunctions.R"
+pooled.fits = pool(lm.fits)
+fit = summary(pooled.fits)
+
+# Treatment coefficient of the main effect of A and the SE using Rubin's rules
+A_trtcoefLM = fit$estimate[fit$term=="a"] 
+A_seLM = fit$std.error[fit$term=="a"]
 
  
