@@ -263,3 +263,4 @@ A_trtcoefLMM = (fit$estimate[fit$term=="a21"] + fit$estimate[fit$term=="a21"] +
                   fit$estimate[fit$term=="a22"] + fit$estimate[fit$term=="a24"])/4
 
  
+
