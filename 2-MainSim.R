@@ -1,6 +1,7 @@
 ##### This script is the main simulation code (uses functions from 1-SimFunctions.R) #####
 setwd("~/NIH Internship")
 source("1-SmartSimFunctions.R")
+source("1a-ImputationFunctions.R")
 
 ################################################################################
 #-------------------------------------------------------------------------------
@@ -24,13 +25,16 @@ library(lsmeans)
 library(multcomp)
 library(nlme)
 library(mvtnorm)
+library(mice)
+library(broom.mixed)
+
 #library(tidyverse)
 
 #------------------------------------------------------------
 # NUMBER OF REPS AND BOOTSTRAP SAMPLES, AND MODEL INDICATORS  
 #------------------------------------------------------------
 #Number of reps and bootstraps, model indicators and zstar
-nreps = 10 #number of rcts
+nreps = 100 #number of rcts
 B = 0 #number of bootstrap samples
 z975=qnorm(.975,mean=0,sd=1)
 LMM = 1 #indicator variables for LMM and LM
@@ -92,8 +96,13 @@ frac_treat=.5
 #  beta_mnr    = effect of non-response
 #  beta_mr     = effect of (Y21+Y22+Y23+Y24)/4-10000
 #  beta_yt     = effect of Yt (current time point)
+
+# IMPUTATION PARAMETERS
+# M            = number of imputed datasets
+# impute       = indicates whether you want results after MI 
+# SA           = indicators whether you want to conduct a sensitivity analysis
 #------------------------------------------------------------
-miss_type="MCAR"
+miss_type="MAR"
 alpha_m=-2.2
 beta_m0=-.5/1000
 beta_ma=1
@@ -102,6 +111,9 @@ beta_mnr=.75
 beta_mr=-.25/1000
 beta_yt =-.25/1000
 miss_prob=.1 #only relevant for MCAR
+M = 10
+impute = 0
+SA = 0
 
 # Results dataframe will contain the rep #, model ("LMM" or "LM"), SE_type (bootstrap or model),
 #treatment coef, SE, RMSE, Coverage probability and rejection (0 or 1) for the main effect of A
@@ -114,6 +126,7 @@ options(warn=-1)
 # Main code 
 #-------------------------------------------------------------------------------
 ################################################################################
+
 start_time = Sys.time()
 
 for (nrep in 1:nreps){
@@ -140,6 +153,16 @@ sim.dats = gen.data(seed = currentseed, alpha = alpha, beta_age = beta_age, beta
 wide.dat = sim.dats[[1]] #for linear model
 long.dat = sim.dats[[2]] #for linear mixed model
 
+#-------------------------------------------
+# Impute data
+#-------------------------------------------
+
+if (impute==1){
+  imps = impute.data(long.dat,wide.dat,M=M,SA=SA)
+  lmm.imps = imps[[1]]
+  lm.imps = imps[[2]]
+}
+
 
 #-------------------------------------------
 # Get and test contrasts based on model SE
@@ -149,27 +172,42 @@ cat("Computing and testing contrasts","\n")
 p0_hat = (sum(wide.dat$a==0)-sum(wide.dat$nr0==1))/(sum(wide.dat$a==0))
 p1_hat = (sum(wide.dat$a==1)-sum(wide.dat$nr1==1))/(sum(wide.dat$a==1))
 
-# Update results data frame with contrasts, SE, hypothesis testing etc. for the rep
 
 # LM model
 if(LM == 1){ 
   
-  #Get contrast and SE
-  fit=lm(y_avg~ba+y0+a+b1+b0+nr1+nr0,data=wide.dat)
-  
-  # TEST FOR MAIN EFFECT OF A - LM
-  K=rep(0,times=8) #8 elements because we took out ym1
-  dim(K)=c(1,8)
-  K[4] = 1   #Beta_a hat 
-  c_LM=glht(fit,linfct=K)
-  #z=summary(c_LM,test=Chisqtest())
-  
-  #Trt coef and SE
-  A_trtcoefLM = coef(c_LM)[1]
-  A_seLM = sqrt(vcov(c_LM)[1,1])
+  #Fit model 
+  if (impute == 1){ #using imputed data
+    
+    #Obtain list of model fits for each imputed dataset
+    lm.fits = lapply(1:M,fit.imputed,mod.type="LM",allimp=lm.imp) #fit.imputed() is a function in "1a-ImputationFunctions.R"
+    pooled.fits = pool(lm.fits)
+    fit = summary(pooled.fits)
+    
+    A_trtcoefLM = fit$estimate[fit$term=="a"] 
+    
+    #Still working on this
+    A_seLM
+  } 
+  else #using observed data 
+  {
+    fit=lm(y_avg~ba+y0+a+b1+b0+nr1+nr0,data=wide.dat) 
+
+    # TEST FOR MAIN EFFECT OF A - LM
+    K=rep(0,times=8) #8 elements because we took out ym1
+    dim(K)=c(1,8)
+    K[4] = 1   #Beta_a hat 
+    c_LM=glht(fit,linfct=K)
+    #z=summary(c_LM,test=Chisqtest())
+    
+    #Trt coef and SE
+    A_trtcoefLM = coef(c_LM)[1]
+    A_seLM = sqrt(vcov(c_LM)[1,1])
+  }
   
   #Compute RMSE, Coverage probability for 95% CI and hypothesis test
-  #Contrast: true_LM = beta_a + (1-p_1)*beta_1nr + (1-p_0)*beta_0nr
+  
+  #Old Contrast: true_LM = beta_a + (1-p_1)*beta_1nr + (1-p_0)*beta_0nr
   true_LM = beta_a
   testA_LM = RMSE_CovP_Rej(truth=true_LM, trtcoef=A_trtcoefLM, SE=A_seLM, zstar= z975) #function defined in 1-SimFunctions.R
   A_RMSELM = testA_LM[1]; A_CovPLM = testA_LM[2]; A_rejLM = testA_LM[3]
@@ -182,15 +220,29 @@ if(LM == 1){
 # LMM model
 if(LMM == 1){ 
   
-  #Fit model
+  # Fit model
+  if (impute == 1){ #using imputed data
+    
+    #Obtain list of model fits for each imputed dataset
+    lmm.fits = lapply(1:M,fit.imputed,mod.type="LMM",allimp=lmm.imp) #fit.imputed() is a function in "1a-ImputationFunctions.R"
+    pooled.fits = pool(lmm.fits)
+    fit = summary(pooled.fits)
+    
+    A_trtcoefLMM = (fit$estimate[fit$term=="a21"] + fit$estimate[fit$term=="a21"] +
+                   fit$estimate[fit$term=="a22"] + fit$estimate[fit$term=="a24"])/4
+    #Still working on this
+    A_seLMM 
+  } 
+  else #using raw data
+  { 
   fit=lmer(y~0+ba+runin+first_half+time_1st_half+time2_1st_half+time3_1st_half+second_half+time_2nd_half+time2_2nd_half+time3_2nd_half+
-             a1+a2+a3+a4+a5+a6+a7+a8+a9+a10+a11+a12+a13+a14+a15+a16+a17+a18+a19+a20+a21+a22+a23+a24+
-             b113+b114+b115+b116+b117+b118+b119+b120+b121+b122+b123+b124+
-             b013+b014+b015+b016+b017+b018+b019+b020+b021+b022+b023+b024+
-             nr113+nr114+nr115+nr116+nr117+nr118+nr119+nr120+nr121+nr122+nr123+nr124+
-             nr013+nr014+nr015+nr016+nr017+nr018+nr019+nr020+nr021+nr022+nr023+nr024+
-             (runin+ time_1st_half+ time_2nd_half | id), control=lmerControl(check.nobs.vs.nRE="ignore"), data=long.dat)
-  
+               a1+a2+a3+a4+a5+a6+a7+a8+a9+a10+a11+a12+a13+a14+a15+a16+a17+a18+a19+a20+a21+a22+a23+a24+
+               b113+b114+b115+b116+b117+b118+b119+b120+b121+b122+b123+b124+
+               b013+b014+b015+b016+b017+b018+b019+b020+b021+b022+b023+b024+
+               nr113+nr114+nr115+nr116+nr117+nr118+nr119+nr120+nr121+nr122+nr123+nr124+
+               nr013+nr014+nr015+nr016+nr017+nr018+nr019+nr020+nr021+nr022+nr023+nr024+
+               (runin+ time_1st_half+ time_2nd_half | id), control=lmerControl(check.nobs.vs.nRE="ignore"), data=long.dat)
+ 
   # TEST FOR MAIN EFFECT OF A - LMM
   K=rep(0,times=82)
   dim(K)=c(1,82)
@@ -204,9 +256,11 @@ if(LMM == 1){
   #Trt coef and SE
   A_trtcoefLMM = coef(c_LMM)[1]
   A_seLMM = sqrt(vcov(c_LMM)[1,1])
- 
+  }
+  
   #Compute RMSE, Coverage probability for 95% CI and hypothesis test
- #Contrast: true_LMM = beta_a + ((1-p_1)*(beta_nr121+beta_nr122+beta_nr123+beta_nr124))/4 -
+  
+ #Old contrast: true_LMM = beta_a + ((1-p_1)*(beta_nr121+beta_nr122+beta_nr123+beta_nr124))/4 -
    # ((1-p_0)*(beta_nr021+beta_nr022+beta_nr023+beta_nr024))/4
   true_LMM = beta_a 
   testA_LMM = RMSE_CovP_Rej(truth=true_LMM, trtcoef=A_trtcoefLMM, SE=A_seLMM, zstar= z975) #function defined in 1-SimFunctions.R
